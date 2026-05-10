@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 from categoriser import categorise_transactions
+from features import extract_features 
+from archetypes import assign_archetype, generate_insights
 
 app = FastAPI() # creates FastAPI server 
 
@@ -21,6 +23,7 @@ class Transaction(BaseModel):
     description: str
     amount: float
     category: str
+    time: str = ""
 
 class AnalyseRequest(BaseModel):
     transactions: List[Transaction]
@@ -38,6 +41,9 @@ def analyse(request: AnalyseRequest):
     # categorise the transactions
     transactions_list = [t.dict() for t in request.transactions]
     categorised = categorise_transactions(transactions_list)
+    features = extract_features(categorised)
+    archetype_name, archetype_data, scores = assign_archetype(features)
+    insights = generate_insights(features, archetype_name)
 
     # count spending by category
     # cat = category name
@@ -67,17 +73,13 @@ def analyse(request: AnalyseRequest):
     # hardcoded mock response for now
     # real ML pipeline comes later
     return {
-        "archetype": "The Comfort Seeker",
-        "portrait": "You spend to feel better. Your transactions reveal a pattern of emotional regulation — food and entertainment spike when stress is high, especially late at night. Your wallet is doing emotional work your mind hasn't processed yet.",
+        "archetype": archetype_name,
+        "portrait": archetype_data["description"],
         "metrics": [
-            { "value": "73", "label": "present bias", "color": "#D4537E" },
-            { "value": f"${round(total_spent, 2)}", "label": "total analysed", "color": "#2E7D32" },
-            { "value": "31%", "label": "late night spend", "color": "#D4537E" },
+            { "value": str(features.get("present_bias_score", 0)), "label": "present bias", "color": "#D4537E" },
+            { "value": f"${features.get('total_amount', 0)}", "label": "total analysed", "color": "#2E7D32" },
+            { "value": f"{round(features.get('late_night_ratio', 0) * 100)}%", "label": "late night spend", "color": "#D4537E" },
         ],
-        "insights": [
-            { "color": "#D4537E", "label": "Late night spending", "text": "31% of your transactions happen after 10pm, averaging 40% above your normal transaction size." },
-            { "color": "#2E7D32", "label": "Social spend clusters", "text": "Your food spending peaks on Fridays and weekends, suggesting you spend more with others around." },
-            { "color": "#ED93B1", "label": "Subscription creep", "text": "You have 6 active subscriptions totalling $87/month. 2 show no adjacent usage signals." },
-        ],
+        "insights": insights,
         "chartData": chart_data
     }

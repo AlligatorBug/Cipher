@@ -14,6 +14,7 @@ function UploadScreen() {
   const [category, setCategory] = useState('Food');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [time, setTime] = useState('');
 
   // state for CSV upload
   const [file, setFile] = useState(null);
@@ -24,10 +25,12 @@ function UploadScreen() {
       description,
       amount: parseFloat(amount),
       category,
+      time,
     };
     setTransactions([...transactions, newTransaction]);
     setDescription('');
     setAmount('');
+    setTime('');
   }
 
   function handleFileChange(e) {
@@ -146,6 +149,17 @@ function UploadScreen() {
                   <option>Others</option>
                 </select>
               </div>
+              <select
+                className="input"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+            >
+                <option value="">Time of day (optional)</option>
+                <option value="morning">Morning (6am–12pm)</option>
+                <option value="afternoon">Afternoon (12pm–6pm)</option>
+                <option value="evening">Evening (6pm–10pm)</option>
+                <option value="late night">Late night (10pm–6am)</option>
+            </select>
               <button className="btn-green" onClick={addTransaction}>
                 + Add transaction
               </button>
