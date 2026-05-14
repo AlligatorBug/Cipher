@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from groq import Groq
+from dotenv import load_dotenv
+import os
 from pydantic import BaseModel
 from typing import List
 from categoriser import categorise_transactions
@@ -7,6 +10,7 @@ from features import extract_features
 from archetypes import assign_archetype, generate_insights
 
 app = FastAPI() # creates FastAPI server 
+load_dotenv() # loads .env file 
 
 # ── allow React (localhost:3000) to talk to FastAPI (localhost:8000) ──
 app.add_middleware(
@@ -74,7 +78,7 @@ def analyse(request: AnalyseRequest):
     # real ML pipeline comes later
     return {
         "archetype": archetype_name,
-        "portrait": archetype_data["description"],
+        "portrait": generate_portrait(archetype_name, features),
         "metrics": [
             { "value": str(features.get("present_bias_score", 0)), "label": "present bias", "color": "#D4537E" },
             { "value": f"${features.get('total_amount', 0)}", "label": "total analysed", "color": "#2E7D32" },
@@ -83,3 +87,30 @@ def analyse(request: AnalyseRequest):
         "insights": insights,
         "chartData": chart_data
     }
+
+def generate_portrait(archetype_name: str, features: dict) -> str:
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    prompt = f"""You are Cipher, a behavioural finance app.
+                The user's spending archetype is: {archetype_name}
+
+                Their key behavioural data:
+                - Present bias score: {features['present_bias_score']}/100
+                - Late night spending: {round(features['late_night_ratio'] * 100)}% of transactions
+                - Food delivery ratio: {round(features['food_delivery_ratio'] * 100)}% of food spend
+                - Top spending category: {features['top_category']} ({round(features['top_category_dominance'] * 100)}% of total)
+                - Subscription density: {round(features['subscription_density'] * 100)}% of transactions
+                - Merchant loyalty score: {features['merchant_loyalty']}
+
+                Write exactly 2-3 sentences describing their spending psychology. Rules:
+                - Be specific to their numbers, not generic
+                - Use plain language, not financial jargon
+                - Do not be preachy or give advice
+                - Speak like a smart friend, not a financial advisor
+                - Ground observations in real behavioural science concepts (present bias, loss aversion, etc.)"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=200
+    )
+    return response.choices[0].message.content.strip()
