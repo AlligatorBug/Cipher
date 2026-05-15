@@ -1,4 +1,3 @@
-frontend/
 venv/
 node_modules/
 .env
