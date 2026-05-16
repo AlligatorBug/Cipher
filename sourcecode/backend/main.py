@@ -1,4 +1,5 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Header
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 import pdfplumber
@@ -14,7 +15,6 @@ from auth import hash_password, verify_password, create_token, decode_token
 from database import get_db, SessionLocal
 from sqlalchemy import text
 import uuid
-from fastapi import Depends, HTTPException, Header
 
 app = FastAPI() # creates FastAPI server 
 load_dotenv() # loads .env file 
@@ -139,64 +139,105 @@ def generate_portrait(archetype_name: str, features: dict) -> str:
 
 @app.post("/parse-pdf")
 async def parse_pdf(file: UploadFile = File(...)):
+    import re
+    from datetime import datetime
+
     contents = await file.read()
     transactions = []
+    current_year = datetime.now().year
+
+    months = {'JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'}
+
+    skip_keywords = [
+        'payment', 'sub-total', 'subtotal', 'balance', 'total', 'interest',
+        'previous', 'statement', 'date', 'description', 'amount', 'page',
+        'citibank', 'mastercard', 'visa', 'giro', 'minimum', 'foreignamount',
+        'xxxx', 'miles', 'retail', 'kindly', 'transactionsfor',
+        'alltransactions', 'coreg', 'robinson', 'grand', 'pleasenote',
+        'ccy', 'conversion', 'bonus', 'carried', 'earned', 'redeemed',
+        'protect', 'notify', 'important', 'announcements'
+    ]
 
     with pdfplumber.open(io.BytesIO(contents)) as pdf:
         for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                if not table or len(table) < 2:
+            text = page.extract_text()
+            if not text:
+                continue
+
+            lines = text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if not line:
                     continue
 
-                # first row is headers
-                headers = [str(h or '').strip().lower() for h in table[0]]
-
-                # detect which column is which by name
-                date_idx = next((i for i, h in enumerate(headers) if 'date' in h), None)
-                desc_idx = next((i for i, h in enumerate(headers) if 'desc' in h or 'merchant' in h or 'details' in h or 'transaction' in h), None)
-                amt_idx  = next((i for i, h in enumerate(headers) if 'amount' in h or 'debit' in h or 'withdrawal' in h), None)
-
-                # skip table if we can't find the key columns
-                if desc_idx is None or amt_idx is None:
+                line_nospace = line.replace(' ', '').lower()
+                if any(k in line_nospace for k in skip_keywords):
                     continue
 
-                for row in table[1:]:  # skip header row
-                    if not row:
-                        continue
+                # match DD+MON at start e.g. "22MAR" or "01APR"
+                match = re.match(r'^(\d{1,2})([A-Z]{3})\s+(.+)$', line)
+                if not match:
+                    continue
 
-                    desc_val = str(row[desc_idx] or '').strip()
-                    amt_val  = str(row[amt_idx] or '').strip()
-                    date_val = str(row[date_idx] or '').strip() if date_idx is not None else ''
+                day = match.group(1)
+                mon = match.group(2)
+                rest = match.group(3)
 
-                    if not desc_val:
-                        continue
+                if mon not in months:
+                    continue
 
-                    # skip summary/payment rows
-                    skip_keywords = ['payment', 'sub-total', 'subtotal', 'balance', 'total', 'interest', 'fee', 'gst']
-                    if any(k in desc_val.lower() for k in skip_keywords):
-                        continue
+                # extract amount from end
+                amt_match = re.search(r'(\d{1,3}(?:,\d{3})*\.\d{2})$', rest)
+                if not amt_match:
+                    continue
 
-                    try:
-                        amt_clean = amt_val.replace(',', '').replace('(', '').replace(')', '').strip()
-                        amount = abs(float(amt_clean))
-                    except ValueError:
-                        continue
+                amount_str = amt_match.group(1)
+                description = rest[:amt_match.start()].strip()
 
+                # clean description
+                description = re.sub(r'\s+(?:Singapore|SINGAPORE)\s*\w*$', '', description).strip()
+                description = re.sub(r'\s+[A-Z]{2,3}$', '', description).strip()
+                description = re.sub(r'\s+\w+\s+(?:SG|MY|IE|US|AU)$', '', description).strip()
+
+                if not description:
+                    continue
+
+                try:
+                    amount = float(amount_str.replace(',', ''))
                     if amount <= 0:
                         continue
 
+                    month_num = datetime.strptime(mon, "%b").month
+                    year = current_year if month_num <= datetime.now().month else current_year - 1
+                    date_obj = datetime.strptime(f"{day} {mon} {year}", "%d %b %Y")
+                    date_formatted = date_obj.strftime("%Y-%m-%d")
+
                     transactions.append({
-                        "description": desc_val,
+                        "description": description,
                         "amount": amount,
                         "category": "",
-                        "time": date_val
+                        "time": "",
+                        "date": date_formatted
                     })
+
+                except Exception:
+                    continue
 
     if not transactions:
         return {"error": "No transactions found in PDF"}
 
     return {"transactions": transactions}
+
+@app.post("/debug-pdf")
+async def debug_pdf(file: UploadFile = File(...)):
+    import io
+    contents = await file.read()
+    result = []
+    with pdfplumber.open(io.BytesIO(contents)) as pdf:
+        for i, page in enumerate(pdf.pages):
+            text = page.extract_text()
+            result.append({"page": i, "text": text})
+    return {"pages": result}
 
 # ── register endpoint ──
 @app.post("/register")
@@ -277,7 +318,10 @@ def add_transaction(request: dict, user_id: str = Depends(get_current_user)):
             "category": request.get("category", ""),
             "time": request.get("time", "")
         }])
-        predicted = categorised[0]["predicted_category"] if categorised else ""
+        
+        # if user selected a category, use it; otherwise use ML prediction
+        user_category = request.get("category", "")
+        predicted = user_category if user_category and user_category != "Others" else (categorised[0]["predicted_category"] if categorised else "")
 
         db.execute(text("""
             INSERT INTO transactions (id, user_id, description, amount, category, predicted_category, time, date)
@@ -379,5 +423,54 @@ def get_insights(user_id: str = Depends(get_current_user)):
             ],
             "insights": insights
         }
+    finally:
+        db.close()
+
+@app.delete("/transactions/{tx_id}")
+def delete_transaction(tx_id: str, user_id: str = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        db.execute(text("""
+            DELETE FROM transactions 
+            WHERE id = :id AND user_id = :user_id
+        """), {"id": tx_id, "user_id": user_id})
+        db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+@app.put("/transactions/{tx_id}")
+def update_transaction(tx_id: str, request: dict, user_id: str = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        categorised = categorise_transactions([{
+            "description": request.get("description", ""),
+            "amount": request.get("amount", 0),
+            "category": request.get("category", ""),
+            "time": request.get("time", "")
+        }])
+        predicted = categorised[0]["predicted_category"] if categorised else ""
+
+        db.execute(text("""
+            UPDATE transactions 
+            SET description = :description,
+                amount = :amount,
+                category = :category,
+                predicted_category = :predicted_category,
+                time = :time,
+                date = :date
+            WHERE id = :id AND user_id = :user_id
+        """), {
+            "id": tx_id,
+            "user_id": user_id,
+            "description": request.get("description", ""),
+            "amount": request.get("amount", 0),
+            "category": request.get("category", ""),
+            "predicted_category": predicted,
+            "time": request.get("time", ""),
+            "date": request.get("date", "")
+        })
+        db.commit()
+        return {"success": True}
     finally:
         db.close()

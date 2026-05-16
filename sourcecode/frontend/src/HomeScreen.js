@@ -33,7 +33,7 @@ function HomeScreen({ user, onLogout }) {
         {/* tab content - scrollable */}
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '80px' }}>
           {activeTab === 'calendar' && <CalendarTab key={refreshKey} user={user} onAddPress={() => setShowAddModal(true)} />}
-          {activeTab === 'transactions' && <TransactionsTab key={refreshKey} user={user} />}
+          {activeTab === 'transactions' && <TransactionsTab key={refreshKey} user={user} onRefresh={triggerRefresh} />}
           {activeTab === 'insights' && <InsightsTab user={user} />}
           {activeTab === 'profile' && <ProfileTab user={user} onLogout={onLogout} />}
         </div>
@@ -96,7 +96,7 @@ function HomeScreen({ user, onLogout }) {
   );
 }
 
-function AddModal({ onClose, user }) {
+function AddModal({ onClose, user, onAdded }) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Food');
@@ -123,7 +123,7 @@ function AddModal({ onClose, user }) {
           time
         })
       });
-      onClose();
+      onAdded();
     } catch (err) {
       console.error(err);
     } finally {
