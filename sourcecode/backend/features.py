@@ -5,7 +5,7 @@
 def extract_features(transactions: list) -> dict:
     """
     Takes a list of categorised transactions and extracts
-    15 behavioural features that represent the user's financial personality.
+    behavioural features that represent the user's financial personality.
     """
 
     if not transactions:
@@ -14,26 +14,13 @@ def extract_features(transactions: list) -> dict:
     total = len(transactions)
     total_amount = sum(tx["amount"] for tx in transactions)
 
-    # ── TEMPORAL FEATURES ──
+    # ── CATEGORY FEATURES ──
 
-    # 1. Late night spend ratio
-    # proportion of transactions that happen after 10pm
-    # high ratio = comfort seeking, impulse spending
-    late_night = [tx for tx in transactions if _is_late_night(tx.get("time", ""))]
-    late_night_ratio = len(late_night) / total
-
-    # 2. Weekend spend ratio
-    # high ratio = social spender, experience maximiser
-    weekend = [tx for tx in transactions if _is_weekend(tx.get("day", ""))]
-    weekend_ratio = len(weekend) / total
-
-    # 3. Average transaction size
+    # 1. Average transaction size
     # big infrequent purchases vs small frequent ones
     avg_transaction = total_amount / total
 
-    # ── CATEGORY FEATURES ──
-
-    # 4. Category entropy
+    # 2. Category entropy
     # how diverse or concentrated is spending across categories
     # low entropy = spends on few things (focused/anxious saver)
     # high entropy = spends on many things (experience maximiser)
@@ -43,7 +30,7 @@ def extract_features(transactions: list) -> dict:
         category_counts[cat] = category_counts.get(cat, 0) + 1
     entropy = _calculate_entropy(category_counts, total)
 
-    # 5. Top category dominance
+    # 3. Top category dominance
     # what fraction of total spend goes to the single biggest category
     # high dominance = very focused spender
     category_amounts = {}
@@ -55,13 +42,13 @@ def extract_features(transactions: list) -> dict:
     top_category_amount = category_amounts.get(top_category, 0)
     top_category_dominance = top_category_amount / total_amount if total_amount > 0 else 0
 
-    # 6. Food ratio
+    # 4. Food ratio
     # food spending as fraction of total
     # high food ratio = comfort seeker, social spender
     food_amount = category_amounts.get("Food", 0) + category_amounts.get("Groceries", 0)
     food_ratio = food_amount / total_amount if total_amount > 0 else 0
 
-    # 7. Food delivery ratio
+    # 5. Food delivery ratio
     # grab/foodpanda as fraction of total food spend
     # SG-specific signal — high ratio = comfort seeking, low effort food
     delivery_keywords = ["grab", "foodpanda", "deliveroo", "grabfood"]
@@ -71,13 +58,13 @@ def extract_features(transactions: list) -> dict:
     )
     food_delivery_ratio = delivery_amount / food_amount if food_amount > 0 else 0
 
-    # 8. Shopping ratio
+    # 6. Shopping ratio
     # shopping as fraction of total
     # high = status signaller
     shopping_amount = category_amounts.get("Shopping", 0)
     shopping_ratio = shopping_amount / total_amount if total_amount > 0 else 0
 
-    # 9. Subscription density
+    # 7. Subscription density
     # number of subscription transactions relative to total
     # high = inertia holder
     subscription_count = sum(
@@ -86,9 +73,15 @@ def extract_features(transactions: list) -> dict:
     )
     subscription_density = subscription_count / total
 
+    # 8. Entertainment ratio
+    # entertainment as fraction of total
+    # high = experience maximiser, present hedonist
+    entertainment_amount = category_amounts.get("Entertainment", 0)
+    entertainment_ratio = entertainment_amount / total_amount if total_amount > 0 else 0
+
     # ── BEHAVIOURAL FEATURES ──
 
-    # 10. Merchant loyalty score
+    # 9. Merchant loyalty score
     # do they return to the same merchants or constantly try new ones
     # high loyalty = inertia holder, comfort seeker
     # low loyalty = experience maximiser, status signaller
@@ -99,43 +92,17 @@ def extract_features(transactions: list) -> dict:
     repeat_merchants = sum(1 for count in merchant_counts.values() if count > 1)
     merchant_loyalty = repeat_merchants / len(merchant_counts) if merchant_counts else 0
 
-    # 11. Impulse indicator
-    # ratio of late-night high-value transactions
-    # high = impulse spender, present hedonist
-    avg_amount = total_amount / total
-    impulse_transactions = [
-        tx for tx in transactions
-        if _is_late_night(tx.get("time", "")) and tx["amount"] > avg_amount * 1.5
-    ]
-    impulse_indicator = len(impulse_transactions) / total
-
-    # 12. Entertainment ratio
-    # entertainment as fraction of total
-    # high = experience maximiser, present hedonist
-    entertainment_amount = category_amounts.get("Entertainment", 0)
-    entertainment_ratio = entertainment_amount / total_amount if total_amount > 0 else 0
-
     # ── PSYCHOLOGICAL FEATURES ──
 
-    # 13. Present bias score (0-100)
-    # combines late night ratio, impulse indicator, food delivery ratio
-    # higher = more present-biased
-    present_bias_score = min(100, round(
-        (late_night_ratio * 40) +
-        (impulse_indicator * 35) +
-        (food_delivery_ratio * 25)
-    ))
-
-    # 14. Comfort seeking score (0-100)
-    # combines food ratio, late night ratio, delivery ratio
+    # 10. Comfort seeking score (0-100)
+    # combines food ratio, delivery ratio
     # higher = more comfort-seeking behaviour
     comfort_score = min(100, round(
-        (food_ratio * 40) +
-        (late_night_ratio * 35) +
-        (food_delivery_ratio * 25)
+        (food_ratio * 50) +
+        (food_delivery_ratio * 50)
     ))
 
-    # 15. Status signalling score (0-100)
+    # 11. Status signalling score (0-100)
     # combines shopping ratio, merchant novelty, entertainment ratio
     # higher = more status-signalling behaviour
     merchant_novelty = 1 - merchant_loyalty
@@ -145,13 +112,18 @@ def extract_features(transactions: list) -> dict:
         (entertainment_ratio * 20)
     ))
 
-    return {
-        # temporal
-        "late_night_ratio": round(late_night_ratio, 3),
-        "weekend_ratio": round(weekend_ratio, 3),
-        "avg_transaction": round(avg_transaction, 2),
+    # 12. Present bias score (0-100)
+    # combines food delivery ratio and impulse spending patterns
+    # higher = more present-biased (wants reward now, not later)
+    present_bias_score = min(100, round(
+        (food_delivery_ratio * 50) +
+        (food_ratio * 30) +
+        (subscription_density * 20)
+    ))
 
+    return {
         # category
+        "avg_transaction": round(avg_transaction, 2),
         "entropy": round(entropy, 3),
         "top_category": top_category,
         "top_category_dominance": round(top_category_dominance, 3),
@@ -163,7 +135,6 @@ def extract_features(transactions: list) -> dict:
 
         # behavioural
         "merchant_loyalty": round(merchant_loyalty, 3),
-        "impulse_indicator": round(impulse_indicator, 3),
 
         # psychological scores
         "present_bias_score": present_bias_score,
@@ -178,12 +149,6 @@ def extract_features(transactions: list) -> dict:
 
 
 # ── HELPER FUNCTIONS ──
-
-def _is_late_night(time_str: str) -> bool:
-    """Returns True if transaction happened after 10pm or before 6am"""
-    late_night_indicators = ["late night", "night", "22", "23", "00", "01", "02"]
-    return any(indicator in time_str.lower() for indicator in late_night_indicators)
-
 
 def _is_weekend(day_str: str) -> bool:
     """Returns True if transaction happened on a weekend"""

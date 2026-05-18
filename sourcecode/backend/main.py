@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 import os
 import io
 from pydantic import BaseModel
-from typing import List
 from categoriser import categorise_transactions
 from features import extract_features 
 from archetypes import assign_archetype, generate_insights
@@ -109,15 +108,13 @@ def analyse(request: AnalyseRequest):
     # total spent
     total_spent = sum(tx["amount"] for tx in categorised)
     
-    # hardcoded mock response for now
-    # real ML pipeline comes later
     return {
         "archetype": archetype_name,
         "portrait": generate_portrait(archetype_name, features),
         "metrics": [
             { "value": str(features.get("present_bias_score", 0)), "label": "present bias", "color": "#D4537E" },
             { "value": f"${features.get('total_amount', 0)}", "label": "total analysed", "color": "#2E7D32" },
-            { "value": f"{round(features.get('late_night_ratio', 0) * 100)}%", "label": "late night spend", "color": "#D4537E" },
+            { "value": features.get("top_category", ""), "label": "top category", "color": "#FF6B6B" },
         ],
         "insights": insights,
         "chartData": chart_data
@@ -130,11 +127,12 @@ def generate_portrait(archetype_name: str, features: dict) -> str:
 
                 Their key behavioural data:
                 - Present bias score: {features['present_bias_score']}/100
-                - Late night spending: {round(features['late_night_ratio'] * 100)}% of transactions
                 - Food delivery ratio: {round(features['food_delivery_ratio'] * 100)}% of food spend
                 - Top spending category: {features['top_category']} ({round(features['top_category_dominance'] * 100)}% of total)
                 - Subscription density: {round(features['subscription_density'] * 100)}% of transactions
                 - Merchant loyalty score: {features['merchant_loyalty']}
+                - Comfort score: {features['comfort_score']}/100
+                - Status score: {features['status_score']}/100
 
                 Write exactly 2-3 sentences describing their spending psychology. Rules:
                 - Be specific to their numbers, not generic
@@ -288,7 +286,7 @@ async def parse_pdf(file: UploadFile = File(...), user_id: str = Depends(get_cur
         if not transactions:
             return {"error": "No transactions found in PDF"}
 
-        # save file hash
+        # save file hash so it can't be imported again
         db.execute(text("""
             INSERT INTO imported_files (user_id, file_hash)
             VALUES (:user_id, :file_hash)
@@ -302,13 +300,12 @@ async def parse_pdf(file: UploadFile = File(...), user_id: str = Depends(get_cur
 
 @app.post("/debug-pdf")
 async def debug_pdf(file: UploadFile = File(...)):
-    import io
     contents = await file.read()
     result = []
     with pdfplumber.open(io.BytesIO(contents)) as pdf:
         for i, page in enumerate(pdf.pages):
-            text = page.extract_text()
-            result.append({"page": i, "text": text})
+            page_text = page.extract_text()
+            result.append({"page": i, "text": page_text})
     return {"pages": result}
 
 # ── register endpoint ──
@@ -366,7 +363,6 @@ def login(request: LoginRequest):
         db.close()
 
 # ── transaction endpoints ──
-
 @app.post("/transactions")
 def add_transaction(request: dict, user_id: str = Depends(get_current_user)):
     db = SessionLocal()
@@ -490,7 +486,6 @@ def get_insights(user_id: str = Depends(get_current_user)):
             "metrics": [
                 {"value": str(features.get("present_bias_score", 0)), "label": "present bias", "color": "#D4537E"},
                 {"value": f"${features.get('total_amount', 0)}", "label": "total analysed", "color": "#2E7D32"},
-                {"value": f"{round(features.get('late_night_ratio', 0) * 100)}%", "label": "late night spend", "color": "#D4537E"},
                 {"value": features.get("top_category", ""), "label": "top category", "color": "#FF6B6B"},
             ],
             "insights": insights_data

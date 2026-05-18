@@ -101,7 +101,6 @@ function AddModal({ onClose, user, onAdded }) {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Food');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleAdd() {
@@ -119,8 +118,7 @@ function AddModal({ onClose, user, onAdded }) {
           description,
           amount: parseFloat(amount),
           category,
-          date,
-          time
+          date
         })
       });
       onAdded();
@@ -164,13 +162,6 @@ function AddModal({ onClose, user, onAdded }) {
             <option>Subscriptions</option>
             <option>Utilities</option>
             <option>Others</option>
-          </select>
-          <select className="input" value={time} onChange={e => setTime(e.target.value)}>
-            <option value="">Time of day (optional)</option>
-            <option value="morning">Morning (6am–12pm)</option>
-            <option value="afternoon">Afternoon (12pm–6pm)</option>
-            <option value="evening">Evening (6pm–10pm)</option>
-            <option value="late night">Late night (10pm–6am)</option>
           </select>
         </div>
         <button className="btn-pink" style={{ width: '100%', marginTop: '8px' }} onClick={handleAdd} disabled={loading}>

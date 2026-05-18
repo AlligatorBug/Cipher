@@ -3,15 +3,15 @@
 
 ARCHETYPES = {
     "The Comfort Seeker": {
-        "description": "You spend to feel better. Your transactions reveal emotional regulation patterns — food and entertainment spike when stress is high, especially late at night.",
+        "description": "You spend to feel better. Your transactions reveal emotional regulation patterns — food and delivery spending dominate, suggesting comfort-driven financial behaviour.",
         "behavioural_root": "Emotional regulation spending",
-        "signals": ["high food ratio", "high late night ratio", "high food delivery ratio"],
+        "signals": ["high food ratio", "high food delivery ratio", "high comfort score"],
         "color": "#D4537E"
     },
     "The Present Hedonist": {
-        "description": "You live for now. Your spending reflects a strong preference for immediate pleasure over future security — payday velocity is high and savings signals are absent.",
+        "description": "You live for now. Your spending reflects a strong preference for immediate pleasure over future security — entertainment and food delivery are your go-to outlets.",
         "behavioural_root": "Present bias",
-        "signals": ["high impulse indicator", "high late night ratio", "high entertainment ratio"],
+        "signals": ["high present bias score", "high entertainment ratio", "high food delivery ratio"],
         "color": "#ED93B1"
     },
     "The Status Signaller": {
@@ -23,13 +23,13 @@ ARCHETYPES = {
     "The Anxious Saver": {
         "description": "You protect yourself from loss. Your spending is highly consistent and concentrated — you stick to what you know and avoid discretionary purchases.",
         "behavioural_root": "Loss aversion",
-        "signals": ["low entropy", "high merchant loyalty", "low impulse indicator"],
+        "signals": ["low entropy", "high merchant loyalty", "low present bias score"],
         "color": "#81C784"
     },
     "The Optimism Spender": {
-        "description": "You genuinely believe next month will be different. Your spending is inconsistent and impulsive — optimism about future income drives present overspending.",
+        "description": "You genuinely believe next month will be different. Your spending is inconsistent and varied — optimism about future income drives present overspending.",
         "behavioural_root": "Optimism bias",
-        "signals": ["high impulse indicator", "high category entropy", "low subscription density"],
+        "signals": ["high category entropy", "low subscription density", "high avg transaction"],
         "color": "#C8E6C9"
     },
     "The Inertia Holder": {
@@ -52,26 +52,26 @@ def assign_archetype(features: dict) -> tuple:
     scores = {name: 0 for name in ARCHETYPES} # every archetype starts with a score of 0
 
     # ── Comfort Seeker signals ──
-    # high food ratio, high late night, high delivery
+    # high food ratio, high delivery ratio, high comfort score
     if features.get("food_ratio", 0) > 0.3:
         scores["The Comfort Seeker"] += 3
-    if features.get("late_night_ratio", 0) > 0.2:
-        scores["The Comfort Seeker"] += 2
     if features.get("food_delivery_ratio", 0) > 0.3:
         scores["The Comfort Seeker"] += 3
     if features.get("comfort_score", 0) > 50:
         scores["The Comfort Seeker"] += 2
+    if features.get("food_ratio", 0) > 0.5:
+        scores["The Comfort Seeker"] += 2
 
     # ── Present Hedonist signals ──
-    # high impulse, high late night, high entertainment
-    if features.get("impulse_indicator", 0) > 0.15:
-        scores["The Present Hedonist"] += 3
-    if features.get("late_night_ratio", 0) > 0.25:
-        scores["The Present Hedonist"] += 2
-    if features.get("entertainment_ratio", 0) > 0.2:
-        scores["The Present Hedonist"] += 2
+    # high present bias, high entertainment, high delivery
     if features.get("present_bias_score", 0) > 60:
         scores["The Present Hedonist"] += 3
+    if features.get("entertainment_ratio", 0) > 0.2:
+        scores["The Present Hedonist"] += 2
+    if features.get("food_delivery_ratio", 0) > 0.4:
+        scores["The Present Hedonist"] += 2
+    if features.get("avg_transaction", 0) > 80:
+        scores["The Present Hedonist"] += 2
 
     # ── Status Signaller signals ──
     # high shopping, low merchant loyalty, high entertainment
@@ -85,25 +85,25 @@ def assign_archetype(features: dict) -> tuple:
         scores["The Status Signaller"] += 3
 
     # ── Anxious Saver signals ──
-    # low entropy, high merchant loyalty, low impulse
+    # low entropy, high merchant loyalty, low present bias
     if features.get("entropy", 0) < 1.5:
         scores["The Anxious Saver"] += 3
     if features.get("merchant_loyalty", 0) > 0.4:
         scores["The Anxious Saver"] += 2
-    if features.get("impulse_indicator", 0) < 0.05:
+    if features.get("present_bias_score", 0) < 30:
         scores["The Anxious Saver"] += 2
     if features.get("top_category_dominance", 0) > 0.5:
         scores["The Anxious Saver"] += 2
 
     # ── Optimism Spender signals ──
-    # high impulse, high entropy, low subscriptions
-    if features.get("impulse_indicator", 0) > 0.1:
-        scores["The Optimism Spender"] += 2
+    # high entropy, low subscriptions, high avg transaction
     if features.get("entropy", 0) > 2.0:
         scores["The Optimism Spender"] += 3
     if features.get("subscription_density", 0) < 0.1:
         scores["The Optimism Spender"] += 2
     if features.get("avg_transaction", 0) > 50:
+        scores["The Optimism Spender"] += 2
+    if features.get("shopping_ratio", 0) > 0.2:
         scores["The Optimism Spender"] += 2
 
     # ── Inertia Holder signals ──
@@ -132,6 +132,7 @@ def generate_insights(features: dict, archetype_name: str) -> list:
     top_cat_pct = round(features.get("top_category_dominance", 0) * 100)
     top_cat_amount = features.get("top_category_amount", 0)
 
+    # ── archetype-specific insight ──
     if archetype_name == "The Status Signaller":
         insights.append({
             "color": "#2E7D32",
@@ -154,7 +155,7 @@ def generate_insights(features: dict, archetype_name: str) -> list:
         insights.append({
             "color": "#D4537E",
             "label": "Emotional spending",
-            "text": "Your spending spikes during stressful periods — food and entertainment are your comfort mechanisms. Your wallet is doing emotional work."
+            "text": "Your spending is driven by comfort — food and delivery dominate your transactions. Your wallet is doing emotional work."
         })
     elif archetype_name == "The Present Hedonist":
         insights.append({
@@ -169,32 +170,14 @@ def generate_insights(features: dict, archetype_name: str) -> list:
             "text": "You spend as if next month will be better — but the data shows a consistent pattern. Awareness is the first step to breaking the cycle."
         })
 
-    # late night spending insight
-    late_night_pct = round(features.get("late_night_ratio", 0) * 100)
-    if late_night_pct > 20:
-        insights.append({
-            "color": "#D4537E",
-            "label": "Late night spending",
-            "text": f"{late_night_pct}% of your transactions happen after 10pm. These tend to be more impulsive and emotionally driven."
-        })
-    else:
-        insights.append({
-            "color": "#2E7D32",
-            "label": "Healthy spending hours",
-            "text": f"Most of your spending happens during the day — a sign of more deliberate financial decisions."
-        })
-
-    # top category insight
-    top_cat = features.get("top_category", "Food")
-    top_cat_pct = round(features.get("top_category_dominance", 0) * 100)
-    top_cat_amount = features.get("top_category_amount", 0)
+    # ── top category insight ──
     insights.append({
         "color": "#81C784",
         "label": f"{top_cat} dominance",
         "text": f"{top_cat} is your biggest category at {top_cat_pct}% of your spending (${top_cat_amount}). {'This is above average for your archetype.' if top_cat_pct > 40 else 'Your spending is fairly balanced across categories.'}"
     })
 
-    # subscription insight
+    # ── subscription insight ──
     sub_density = features.get("subscription_density", 0)
     if sub_density > 0.1:
         sub_count = round(sub_density * features.get("total_transactions", 10))
@@ -210,7 +193,7 @@ def generate_insights(features: dict, archetype_name: str) -> list:
             "text": "You have few recurring subscriptions — good. Subscription creep is one of the most common ways people lose money without noticing."
         })
 
-    # food delivery insight
+    # ── food delivery insight ──
     delivery_ratio = features.get("food_delivery_ratio", 0)
     if delivery_ratio > 0.3:
         insights.append({
