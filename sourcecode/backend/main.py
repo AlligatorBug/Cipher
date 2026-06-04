@@ -583,3 +583,56 @@ def update_transaction(tx_id: str, request: dict, user_id: str = Depends(get_cur
         return {"success": True}
     finally:
         db.close()
+
+def _date_prefix(period: str) -> str | None:
+    from datetime import date, timedelta
+    today = date.today()
+    p = period.lower()
+    MONTHS = {"january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+              "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12}
+    if p == "last month":
+        first = today.replace(day=1)
+        last = (first - timedelta(days=1)).replace(day=1)
+        return last.strftime("%Y-%m")
+    if p == "this month":
+        return today.strftime("%Y-%m")
+    if p == "this year":
+        return str(today.year)
+    if p in MONTHS:
+        return f"{today.year}-{str(MONTHS[p]).zfill(2)}"
+    return None
+
+
+@app.get("/search")
+def search_transactions(category: str, period: str, user_id: str = Depends(get_current_user)):
+    from datetime import date
+    db = SessionLocal()
+    try:
+        prefix = _date_prefix(period)
+        if prefix:
+            rows = db.execute(text("""
+                SELECT * FROM transactions
+                WHERE user_id = :user_id
+                  AND predicted_category = :category
+                  AND date LIKE :prefix
+                ORDER BY date DESC
+            """), {"user_id": user_id, "category": category, "prefix": f"{prefix}%"}).fetchall()
+        else:
+            rows = db.execute(text("""
+                SELECT * FROM transactions
+                WHERE user_id = :user_id
+                  AND predicted_category = :category
+                ORDER BY date DESC
+            """), {"user_id": user_id, "category": category}).fetchall()
+
+        transactions = [dict(row._mapping) for row in rows]
+        if not transactions:
+            return {"answer": f"No {category} transactions found for {period}.", "transactions": []}
+
+        total = sum(tx["amount"] for tx in transactions)
+        period_label = period if period not in ("this month", "last month", "this year") else period
+        answer = f"You spent ${total:.2f} on {category} {period_label}."
+        return {"answer": answer, "transactions": transactions}
+    finally:
+        db.close()
+

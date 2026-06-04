@@ -65,17 +65,15 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 
 -----
 
-### Phase 2 — Semantic Search (FAISS)
+### Phase 2 — Transaction Search
 
-**Add vector search over user’s transactions**
+**Structured category + time period search over user’s transactions**
 
-feature: user types query → embed it → FAISS search over tx embeddings → retrieve top-k → LLM summarizes → show answer
+feature: user selects category + time period → DB filters by predicted_category and date → LLM summarises total → show answer + matching transactions
 
-User queries like “how much did I spend on food last month” → semantic search over transaction embeddings → retrieve relevant transactions → LLM summarises.
-
-- [ ] Build FAISS index over user’s transaction embeddings
-- [ ] Add semantic search endpoint in FastAPI
-- [ ] Connect to frontend as a query feature
+- [x] Build search endpoint in FastAPI (GET /search?category=&period=)
+- [x] Connect to frontend as “Ask Cipher” subtab in Insights
+- [x] Date parsing for last month / this month / this year / named months
 -----
 
 ### Phase 3 — Spending Forecasting

@@ -96,15 +96,19 @@ function TransactionsTab({ user, onRefresh, currentMonth, onMonthChange }) {
         </div>
       </div>
 
-      {loading ? (
+      {loading && (
         <p style={{ textAlign: 'center', color: '#999', padding: '40px 0', fontSize: '13px' }}>Loading...</p>
-      ) : transactions.length === 0 ? (
+      )}
+
+      {!loading && transactions.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px 24px' }}>
           <p style={{ fontSize: '32px', marginBottom: '8px' }}>📭</p>
           <p style={{ fontSize: '14px', fontWeight: '500', color: '#1A1A1A', marginBottom: '4px' }}>No transactions yet</p>
           <p style={{ fontSize: '13px', color: '#999' }}>Tap + to add one or import your bank statement</p>
         </div>
-      ) : (
+      )}
+
+      {!loading && transactions.length > 0 && (
         <div style={{ padding: '12px 16px' }}>
           {sortedDates.map(date => (
             <div key={date} style={{ marginBottom: '16px' }}>
