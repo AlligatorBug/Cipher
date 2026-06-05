@@ -473,7 +473,9 @@ def get_insights(user_id: str = Depends(get_current_user)):
             FROM archetypes WHERE user_id = :user_id
         """), {"user_id": user_id}).fetchone()
 
-        if cached and cached.transaction_count == count:
+        import hashlib
+        cat_hash = hashlib.md5("".join(sorted(t.get("predicted_category","") for t in transactions)).encode()).hexdigest()[:8]
+        if cached and cached.transaction_count == count and (cached.portrait and cat_hash in cached.portrait):
             # return cached version — no Groq call!
             import json
             return json.loads(cached.portrait)
@@ -487,6 +489,7 @@ def get_insights(user_id: str = Depends(get_current_user)):
         result = {
             "unlocked": True,
             "transaction_count": count,
+            "cat_hash": cat_hash,
             "archetype": archetype_name,
             "portrait": portrait,
             "metrics": [
@@ -567,7 +570,7 @@ def update_transaction(tx_id: str, request: dict, user_id: str = Depends(get_cur
             "description": request.get("description", ""),
             "amount": request.get("amount", 0),
             "category": request.get("category", ""),
-            "predicted_category": request.get("category", ""),  # use user's chosen category
+            "predicted_category": predicted or request.get("category", ""),
             "time": request.get("time", ""),
             "date": request.get("date", "")
         })

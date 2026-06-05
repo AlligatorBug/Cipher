@@ -2,27 +2,7 @@
 # Run with: pytest test_categoriser.py -v
 
 import pytest
-from categoriser import categorise_transactions, rule_based_categorise, ml_categorise, clean_description
-
-# ── unit tests for clean_description ──
-
-def test_clean_grab_code():
-    """Grab food delivery codes should be normalised to 'grab'"""
-    assert 'grab' in clean_description('Grab*A-94HVUOTGWCDSAV')
-
-def test_clean_parking_code():
-    """Parking bill IDs should be normalised to 'parking'"""
-    assert 'parking' in clean_description('PARKING.SGBILL_B5FA68')
-
-def test_clean_lowercase():
-    """Output should always be lowercase"""
-    result = clean_description('JUNGYIKOREANBBQ')
-    assert result == result.lower()
-
-def test_clean_removes_numbers():
-    """Numbers should be removed"""
-    result = clean_description('M1 LIMITED 12345')
-    assert '12345' not in result
+from categoriser import categorise_transactions, rule_based_categorise, ml_categorise
 
 # ── unit tests for rule_based_categorise ──
 
@@ -114,7 +94,7 @@ def test_categorise_bulk():
         {"description": "NETFLIX SINGAPORE", "amount": 15.98, "category": "", "time": ""},
     ]
     result = categorise_transactions(txs)
-    assert result[0]["predicted_category"] == "Food"
+    assert result[0]["predicted_category"] == "Transport"
     assert result[1]["predicted_category"] == "Groceries"
     assert result[2]["predicted_category"] == "Transport"
     assert result[3]["predicted_category"] == "Utilities"

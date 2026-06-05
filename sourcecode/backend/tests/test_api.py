@@ -109,3 +109,65 @@ def test_get_transactions_with_month_filter():
     )
     assert res.status_code == 200
     assert "transactions" in res.json()
+
+def test_delete_transaction():
+    token = get_token()
+    add = client.post("/transactions",
+        json={"description": "Delete me", "amount": 5.0, "category": "Food", "date": "2026-05-01", "time": ""},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    tx_id = add.json()["id"]
+    res = client.delete(f"/transactions/{tx_id}", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json()["success"] == True
+
+def test_delete_other_users_transaction_fails():
+    token1 = get_token()
+    add = client.post("/transactions",
+        json={"description": "Mine", "amount": 5.0, "category": "Food", "date": "2026-05-01", "time": ""},
+        headers={"Authorization": f"Bearer {token1}"}
+    )
+    tx_id = add.json()["id"]
+    # register a second user and try to delete first user's transaction
+    client.post("/register", json={"email": "other_user@test.com", "password": "password123"})
+    res2 = client.post("/login", json={"email": "other_user@test.com", "password": "password123"})
+    token2 = res2.json()["token"]
+    res = client.delete(f"/transactions/{tx_id}", headers={"Authorization": f"Bearer {token2}"})
+    assert res.status_code == 200  # silently no-ops (WHERE includes user_id)
+
+def test_search_requires_auth():
+    res = client.get("/search?category=Food&period=last month")
+    assert res.status_code == 422
+
+def test_search_returns_answer_and_transactions():
+    token = get_token()
+    res = client.get("/search?category=Food&period=this year",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert "answer" in data
+    assert "transactions" in data
+
+def test_forecast_requires_auth():
+    res = client.get("/forecast")
+    assert res.status_code == 422
+
+def test_forecast_returns_forecasts_list():
+    token = get_token()
+    res = client.get("/forecast", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert "forecasts" in res.json()
+    assert isinstance(res.json()["forecasts"], list)
+
+def test_bulk_add_transactions():
+    token = get_token()
+    res = client.post("/transactions/bulk",
+        json={"transactions": [
+            {"description": "GRAB FOOD", "amount": 12.50, "category": "", "date": "2026-05-01", "time": ""},
+            {"description": "NTUC FAIRPRICE APP PAYM", "amount": 44.45, "category": "", "date": "2026-05-02", "time": ""},
+        ]},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert res.status_code == 200
+    assert res.json()["count"] == 2

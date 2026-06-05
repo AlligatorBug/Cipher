@@ -29,15 +29,18 @@ def forecast_next_month(transactions, category):
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     projected = current_spend * (days_in_month / today.day)
 
-    if len(past_months) < 2:
-        predicted = sum(past_months) / len(past_months) if past_months else 0.0
+    valid_months = [v for v in past_months if isinstance(v, (int, float)) and v >= 0]
+
+    if len(valid_months) < 2:
+        predicted = sum(valid_months) / len(valid_months) if valid_months else 0.0
     else:
-        X = np.array([[i+1] for i in range(len(past_months))]) # [[1], [2], [3], [4]] sklearn expects 2D array for X
-        Y = np.array(list(past_months)) # [200, 180, 220, 190]
+        X = np.array([[i+1] for i in range(len(valid_months))])
+        Y = np.array(valid_months)
         model = LinearRegression()
         model.fit(X, Y)
-        predicted = model.predict([[len(past_months) + 1]])[0] 
-    
+        raw = model.predict([[len(valid_months) + 1]])[0]
+        predicted = float(raw) if np.isfinite(raw) else (sum(valid_months) / len(valid_months))
+
     return {
         "predicted": round(max(predicted, 0.0), 2),
         "current_spend": round(current_spend, 2),
