@@ -1,23 +1,53 @@
 # Cipher
 
-Cipher is a behavioural finance web app that analyses your spending and tells you *why* you spend the way you do — not just what you spend on.
+Cipher is a behavioural finance web app that tells you *why* you spend the way you do — not just what you spend on.
 
-Upload a bank statement PDF (DBS, OCBC, UOB, Amex), and Cipher automatically categorises your transactions, assigns you a spending archetype grounded in behavioural economics (Kahneman, Thaler, Ariely), forecasts your end-of-month spend per category, flags unusual transactions, and generates a plain-language portrait of your spending psychology.
+Upload a bank statement PDF and Cipher categorises your transactions, assigns you a spending archetype grounded in behavioural economics, forecasts your end-of-month spend, and generates a plain-language portrait of your financial psychology.
 
-## Stack
-
-- **Frontend** — React, deployed on Vercel
-- **Backend** — FastAPI (Python), deployed on Railway
-- **Database** — PostgreSQL (Neon)
-- **ML** — scikit-learn (categorisation, forecasting, anomaly detection), sentence-transformers
-- **LLM** — OpenAI API (portrait generation)
+---
 
 ## Features
 
-- PDF parsing for DBS, OCBC, UOB, and Amex credit card statements
-- Automatic transaction categorisation via sentence-transformer zero-shot classification
-- 6 behavioural spending archetypes (Present Hedonist, Comfort Seeker, Status Signaller, Anxious Saver, Optimism Spender, Inertia Holder)
-- Spending forecasts using linear regression on personal transaction history
-- Anomaly detection via Isolation Forest
-- "Ask Cipher" — natural language search over your own transactions
-- JWT authentication with password change support
+- **PDF import** — parses Citibank and Amex credit card statements
+- **Smart categorisation** — sentence-transformer + logistic regression classifier trained on Singapore merchants
+- **Spending archetypes** — 6 psychologically-grounded profiles (Present Hedonist, Comfort Seeker, Status Signaller, Anxious Saver, Optimism Spender, Inertia Holder) rooted in Kahneman, Thaler, and Ariely
+- **Forecasting** — linear regression on your own transaction history to predict end-of-month spend per category
+- **Anomaly detection** — Isolation Forest flags unusually high charges relative to your personal baseline
+- **Ask Cipher** — query your spending by category and time period in plain language
+- **Secure auth** — JWT authentication, bcrypt password hashing
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| Frontend | React, Vercel |
+| Backend | FastAPI (Python), Railway |
+| Database | PostgreSQL (Neon) |
+| ML | scikit-learn, sentence-transformers |
+| LLM | OpenAI API (gpt-4o-mini) |
+
+## Local Setup
+
+**Backend**
+```bash
+cd sourcecode/backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+**Frontend**
+```bash
+cd sourcecode/frontend
+npm install
+echo "REACT_APP_API_URL=http://localhost:8000" > .env
+npm start
+```
+
+**Environment variables (backend `.env`)**
+```
+DATABASE_URL=
+JWT_SECRET=
+OPENAI_API_KEY=
+FRONTEND_URL=
+```
