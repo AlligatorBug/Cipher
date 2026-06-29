@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import AuthScreen from './AuthScreen';
 import HomeScreen from './HomeScreen';
+import AgentChat from './AgentChat'
 import './App.css';
 
 function App() {
@@ -29,7 +30,12 @@ function App() {
     return <AuthScreen onLogin={handleLogin} />;
   }
 
-  return <HomeScreen user={user} onLogout={handleLogout} />;
+  return (
+    <>
+      <HomeScreen user={user} onLogout={handleLogout} />
+      <AgentChat user={user} />
+    </>
+  );
 }
 
 export default App;
