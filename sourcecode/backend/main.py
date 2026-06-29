@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Header
+from fastapi.responses import StreamingResponse
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
@@ -6,6 +7,7 @@ import pdfplumber
 from dotenv import load_dotenv
 import os
 import io
+import json
 from pydantic import BaseModel, EmailStr
 from categoriser import categorise_transactions
 from features import extract_features 
@@ -16,6 +18,8 @@ from sqlalchemy import text
 import uuid
 from forecast import forecast_next_month
 from anomaly import detect_anomalies
+from agent import create_agent
+from utils import date_prefix
 
 app = FastAPI() # creates FastAPI server 
 load_dotenv() # loads .env file 
@@ -63,6 +67,9 @@ class LoginRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     new_password: str
+
+class AgentRequest(BaseModel):
+    question: str
 
 # ── helper to get current user from token ──
 # every endpoint calls this 
@@ -623,24 +630,6 @@ def update_transaction(tx_id: str, request: dict, user_id: str = Depends(get_cur
     finally:
         db.close()
 
-def _date_prefix(period: str) -> str | None:
-    from datetime import date, timedelta
-    today = date.today()
-    p = period.lower()
-    MONTHS = {"january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
-              "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12}
-    if p == "last month":
-        first = today.replace(day=1)
-        last = (first - timedelta(days=1)).replace(day=1)
-        return last.strftime("%Y-%m")
-    if p == "this month":
-        return today.strftime("%Y-%m")
-    if p == "this year":
-        return str(today.year)
-    if p in MONTHS:
-        return f"{today.year}-{str(MONTHS[p]).zfill(2)}"
-    return None
-
 
 @app.get("/search")
 def search_transactions(category: str, period: str, user_id: str = Depends(get_current_user)):
@@ -714,3 +703,24 @@ def get_anomalies(user_id: str = Depends(get_current_user)):
         return {"anomalies": anomalies}
     finally:
         db.close()
+
+@app.post("/agent/chat")
+async def agent_chat(request: AgentRequest, user_id: str = Depends(get_current_user)):
+    agent = create_agent(user_id) # langchain agent
+
+    # each chunk is a dict that is either "model" or "tools"
+    async def stream():
+        for chunk in agent.stream({"messages": [{"role": "user", "content": request.question}]}):
+            if "model" in chunk:
+                for message in chunk["model"]["messages"]:
+                    if hasattr(message, "content") and message.content:
+                        data = json.dumps({"type": "token", "content": message.content})
+                        yield f"data: {data}\n\n"
+            elif "tools" in chunk:
+                for message in chunk["tools"]["messages"]:
+                    if hasattr(message, "name"):
+                        data = json.dumps({"type": "tool", "name": message.name})
+                        yield f"data: {data}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    
+    return StreamingResponse(stream(), media_type="text/event-stream")

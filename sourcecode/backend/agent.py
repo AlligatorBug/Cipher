@@ -1,6 +1,6 @@
 from database import SessionLocal
 from sqlalchemy import text
-from main import _date_prefix
+from utils import date_prefix
 from langchain.agents import create_agent as lc_create_agent # runs the agent loop: think->call tool->think->call tool->answer
 from langchain_openai import ChatOpenAI # LLM 
 from langchain_core.tools import tool # wrap python fxns into smt langchain understands 
@@ -66,7 +66,7 @@ def query_database(sql: str, user_id: str) -> str:
 
 # get spending summary :-)
 def get_spending_summary(period: str, user_id: str) -> str:
-    prefix = _date_prefix(period)
+    prefix = date_prefix(period)
     db = SessionLocal()
     try:
         if prefix:
